@@ -92,13 +92,20 @@ async function handleNotify(request, url) {
     const delayed = body.delayed || false;
 
     const confirmUrl = encodeURIComponent(url.origin + '/owner-confirm');
+    const rawConfirmUrl = url.origin + '/owner-confirm';
 
     let notifyBody = '🚗 挪车请求';
-    if (message) notifyBody += `\\n💬 留言: ${message}`;
+    let webhookText = '';
+
+    if (message) {
+      notifyBody += `\\n💬 留言: ${message}`;
+      webhookText += `💬 留言: ${message}\n`;
+    }
 
     if (location && location.lat && location.lng) {
       const urls = generateMapUrls(location.lat, location.lng);
       notifyBody += '\\n📍 已附带位置信息，点击查看';
+      webhookText += '📍 已附带位置信息，点击下方链接确认和查看\n\n';
 
       await MOVE_CAR_STATUS.put('requester_location', JSON.stringify({
         lat: location.lat,
@@ -107,7 +114,11 @@ async function handleNotify(request, url) {
       }), { expirationTtl: CONFIG.KV_TTL });
     } else {
       notifyBody += '\\n⚠️ 未提供位置信息';
+      webhookText += '⚠️ 未提供位置信息\n\n';
     }
+
+    // 追加具体的确认链接到文本末尾供 Webhook 直接点击
+    webhookText += `前往确认: ${rawConfirmUrl}`;
 
     await MOVE_CAR_STATUS.put('notify_status', 'waiting', { expirationTtl: 600 });
 
@@ -116,10 +127,39 @@ async function handleNotify(request, url) {
       await new Promise(resolve => setTimeout(resolve, 30000));
     }
 
-    const barkApiUrl = `${BARK_URL}/挪车请求/${encodeURIComponent(notifyBody)}?group=MoveCar&level=critical&call=1&sound=minuet&icon=https://cdn-icons-png.flaticon.com/512/741/741407.png&url=${confirmUrl}`;
+    const promises = [];
 
-    const barkResponse = await fetch(barkApiUrl);
-    if (!barkResponse.ok) throw new Error('Bark API Error');
+    // 发送 Webhook 通知 (如 MsgNotify)
+    if (typeof WEBHOOK_URL !== 'undefined' && WEBHOOK_URL) {
+      // 如果配置了 WEBHOOK_TOKEN，拼入请求参数
+      const targetUrl = typeof WEBHOOK_TOKEN !== 'undefined' && WEBHOOK_TOKEN
+        ? `${WEBHOOK_URL}?apikey=${WEBHOOK_TOKEN}`
+        : WEBHOOK_URL;
+
+      promises.push(
+        fetch(targetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: '🚗 挪车请求',
+            text: webhookText,
+            url: rawConfirmUrl
+          })
+        }).catch(err => console.error('Webhook Error:', err))
+      );
+    }
+
+    // 兼容原有的 Bark 通知
+    if (typeof BARK_URL !== 'undefined' && BARK_URL) {
+      const barkApiUrl = `${BARK_URL}/挪车请求/${encodeURIComponent(notifyBody)}?group=MoveCar&level=critical&call=1&sound=minuet&icon=https://cdn-icons-png.flaticon.com/512/741/741407.png&url=${confirmUrl}`;
+      promises.push(
+        fetch(barkApiUrl).catch(err => console.error('Bark Error:', err))
+      );
+    }
+
+    if (promises.length > 0) {
+      await Promise.all(promises);
+    }
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json' }
