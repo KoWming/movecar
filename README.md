@@ -96,8 +96,10 @@
 ### 第四步：配置环境变量
 
 1. Worker →「Settings」→「Variables and Secrets」
-2. 添加以下变量：
+2. 添加以下变量（根据需要选择）：
    - `BARK_URL`：你的 Bark 推送地址（如 `https://api.day.app/xxxxx`）
+   - `WEBHOOK_URL`：自定义 Webhook 地址（如 MoviePilot MsgNotify 插件的 JSON 接口，或企业微信/钉钉/飞书群机器人等，用于在聊天工具中收到带有跳转链接的通知文本）
+   - `WEBHOOK_TOKEN`：与 WEBHOOK_URL 配合使用的 Token/Apikey（选填）
    - `PHONE_NUMBER`：备用联系电话（可选）
 
 ### 第五步：绑定域名（可选）
