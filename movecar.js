@@ -129,24 +129,50 @@ async function handleNotify(request, url) {
 
     const promises = [];
 
-    // 发送 Webhook 通知 (如 MsgNotify)
+    // 发送 Webhook 通知 (如 MsgNotify, 企微, 钉钉, 飞书群机器人)
     if (typeof WEBHOOK_URL !== 'undefined' && WEBHOOK_URL) {
-      // 如果配置了 WEBHOOK_TOKEN，拼入请求参数
-      const targetUrl = typeof WEBHOOK_TOKEN !== 'undefined' && WEBHOOK_TOKEN
-        ? `${WEBHOOK_URL}?apikey=${WEBHOOK_TOKEN}`
-        : WEBHOOK_URL;
+      if (WEBHOOK_URL.includes('qyapi.weixin.qq.com') || WEBHOOK_URL.includes('oapi.dingtalk.com')) {
+        // 适配企业微信 / 钉钉群机器人 (自带 markdown/text 格式)
+        promises.push(
+          fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              msgtype: 'text',
+              text: { content: '🚗 挪车请求\n\n' + webhookText }
+            })
+          }).catch(err => console.error('WeCom/DingTalk Webhook Error:', err))
+        );
+      } else if (WEBHOOK_URL.includes('open.feishu.cn')) {
+        // 适配飞书群机器人
+        promises.push(
+          fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              msg_type: 'text',
+              content: { text: '🚗 挪车请求\n\n' + webhookText }
+            })
+          }).catch(err => console.error('Feishu Webhook Error:', err))
+        );
+      } else {
+        // 适配普通 Webhook / MoviePilot MsgNotify
+        const targetUrl = typeof WEBHOOK_TOKEN !== 'undefined' && WEBHOOK_TOKEN
+          ? `${WEBHOOK_URL}?apikey=${WEBHOOK_TOKEN}`
+          : WEBHOOK_URL;
 
-      promises.push(
-        fetch(targetUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: '🚗 挪车请求',
-            text: webhookText,
-            url: rawConfirmUrl
-          })
-        }).catch(err => console.error('Webhook Error:', err))
-      );
+        promises.push(
+          fetch(targetUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: '🚗 挪车请求',
+              text: webhookText,
+              url: rawConfirmUrl
+            })
+          }).catch(err => console.error('Webhook Error:', err))
+        );
+      }
     }
 
     // 兼容原有的 Bark 通知
